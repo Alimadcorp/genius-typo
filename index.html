@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Genius Typo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+
+    <script>
+        // Loads the Groq key from api.txt (same folder as this file).
+        let key;
+        const keyReady = fetch("api.txt")
+            .then(r => { if (!r.ok) throw new Error("api.txt not found"); return r.text(); })
+            .then(t => { key = t.trim(); if (!key) throw new Error("api.txt is empty"); });
+        keyReady.catch(() => { }); // errors are shown when the player presses Start
+    </script>
+
+    <style>
+        :root {
+            --bg: #eef1f6;
+            --panel: #ffffff;
+            --ink: #172033;
+            --muted: #5d6a82;
+            --line: #d5dbe6;
+            --soft: #e4e9f2;
+            --me: #2f4bd8;
+            --me-ink: #ffffff;
+            --good: #16805a;
+            --bad: #c4374a;
+            color-scheme: light dark;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0e1320;
+                --panel: #161d2d;
+                --ink: #e9edf6;
+                --muted: #97a3bc;
+                --line: #29334a;
+                --soft: #1f293c;
+                --me: #4a63ea;
+                --good: #3fbf8d;
+                --bad: #ef6b7b;
+            }
+        }
+
+        * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
+
+        html, body { height: 100%; }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--ink);
+            font-family: "Bricolage Grotesque", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            font-size: 17px;
+            line-height: 1.5;
+        }
+
+        button { font: inherit; cursor: pointer; }
+        :focus-visible { outline: 3px solid var(--me); outline-offset: 2px; }
+
+        .screen {
+            max-width: 640px;
+            margin: 0 auto;
+            padding: clamp(28px, 8vh, 80px) 24px;
+        }
+
+        h1 {
+            font-size: clamp(56px, 15vw, 108px);
+            line-height: .92;
+            letter-spacing: -.035em;
+            font-weight: 800;
+            margin: 0 0 24px;
+        }
+
+        h2 {
+            font-size: clamp(30px, 7vw, 44px);
+            line-height: 1.05;
+            letter-spacing: -.02em;
+            font-weight: 800;
+            margin: 0 0 14px;
+        }
+
+        .lede { font-size: 19px; color: var(--muted); max-width: 34em; margin: 0 0 28px; }
+        .fine { color: var(--muted); font-size: 15px; max-width: 36em; }
+        .err { color: var(--bad); min-height: 1.5em; margin: 14px 0 0; }
+
+        .mock {
+            display: flex;
+            align-items: center;
+            min-height: 54px;
+            padding: 12px 22px;
+            margin: 0 0 24px;
+            background: var(--panel);
+            border: 1.5px solid var(--line);
+            border-radius: 999px;
+            font-size: 18px;
+        }
+
+        .caret {
+            display: inline-block;
+            width: 2px;
+            height: 1.15em;
+            margin-left: 2px;
+            background: var(--me);
+            animation: blink 1s steps(1) infinite;
+        }
+
+        .btn {
+            background: var(--me);
+            color: var(--me-ink);
+            border: 0;
+            border-radius: 12px;
+            padding: 14px 26px;
+            font-weight: 600;
+            font-size: 18px;
+        }
+        .btn:hover { filter: brightness(1.1); }
+        .btn:disabled { opacity: .5; cursor: default; }
+        .btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+        .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+        /* Chat */
+        #chat {
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+            max-width: 640px;
+            margin: 0 auto;
+            padding: 0;
+            background: var(--bg);
+            border-left: 1px solid var(--line);
+            border-right: 1px solid var(--line);
+        }
+
+        .chat-head {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .avatar {
+            flex: none;
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            display: grid; place-items: center;
+            background: var(--soft);
+            font-weight: 800;
+        }
+
+        .who { flex: 1; min-width: 0; line-height: 1.2; }
+        .who b { display: block; }
+        .who small { color: var(--muted); }
+
+        .hud { display: flex; gap: 14px; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+        .hud b { color: var(--ink); font-size: 18px; }
+
+        .leave {
+            background: transparent;
+            border: 1.5px solid var(--line);
+            color: var(--muted);
+            border-radius: 10px;
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+        .leave:hover { color: var(--bad); border-color: var(--bad); }
+
+        details.scn {
+            background: var(--panel);
+            border-bottom: 1px solid var(--line);
+            padding: 8px 16px;
+            font-size: 15px;
+            color: var(--muted);
+        }
+        details.scn summary { cursor: pointer; }
+        details.scn p { margin: 8px 0 4px; color: var(--ink); }
+
+        #log {
+            flex: 1;
+            overflow-y: auto;
+            padding: 18px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .b {
+            max-width: 78%;
+            padding: 9px 14px;
+            border-radius: 18px;
+            overflow-wrap: anywhere;
+            animation: pop .16s ease-out;
+        }
+        .b.ai { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 6px; }
+        .b.me { align-self: flex-end; background: var(--me); color: var(--me-ink); border-bottom-right-radius: 6px; }
+
+        .seen { align-self: flex-end; margin-top: -4px; font-size: 12px; color: var(--muted); }
+
+        .dots { align-self: flex-start; display: flex; gap: 5px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; border-bottom-left-radius: 6px; }
+        .dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: bounce 1s infinite; }
+        .dots span:nth-child(2) { animation-delay: .15s; }
+        .dots span:nth-child(3) { animation-delay: .3s; }
+
+        .notice { padding: 6px 16px; font-size: 14px; color: var(--bad); background: var(--panel); }
+
+        .composer {
+            display: flex;
+            gap: 10px;
+            padding: 12px 16px 16px;
+            background: var(--panel);
+            border-top: 1px solid var(--line);
+        }
+        .composer input {
+            flex: 1;
+            min-width: 0;
+            font: inherit;
+            font-size: 17px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1.5px solid var(--line);
+            background: var(--bg);
+            color: var(--ink);
+        }
+        .composer .btn { padding: 12px 20px; font-size: 17px; }
+
+        /* End screen */
+        .verdict { font-size: clamp(48px, 13vw, 88px); line-height: .95; letter-spacing: -.035em; margin: 0 0 10px; }
+        .verdict.good { color: var(--good); }
+        .verdict.bad { color: var(--bad); }
+        .score { font-size: 22px; font-weight: 600; margin: 0 0 12px; }
+        .reason { color: var(--muted); font-size: 19px; max-width: 34em; margin: 0; }
+
+        .stats { display: grid; grid-template-columns: 1fr 1fr; column-gap: 32px; margin: 28px 0 12px; border-top: 1px solid var(--line); }
+        .stat { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+        .stat dt { color: var(--muted); }
+        .stat dd { margin: 0; font-weight: 800; font-size: 28px; font-variant-numeric: tabular-nums; }
+        .stat dd small { font-size: 14px; font-weight: 400; color: var(--muted); }
+
+        @media (max-width: 560px) {
+            .stats { grid-template-columns: 1fr; }
+            .hud .hide-sm { display: none; }
+            .b { max-width: 88%; }
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+        @keyframes pop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+        @media (prefers-reduced-motion: reduce) {
+            .caret, .b, .dots span { animation: none; }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Start -->
+    <main id="start" class="screen">
+        <h1>Genius Typo.</h1>
+        <p class="lede">A typing game with no word lists. You get dropped into an awkward everyday situation and have to
+            talk your way through it, live, with someone who may be upset with you.</p>
+        <div class="mock" aria-hidden="true"><span id="heroText"></span><span class="caret"></span></div>
+        <p class="fine">Your speed and mistakes are tracked while you chat. Every conversation ends well or badly, and
+            which one it is depends on what you say. Go quiet and they will notice.</p>
+        <button class="btn" id="startBtn">Start game</button>
+        <p class="err" id="startErr" role="alert"></p>
+    </main>
+
+    <!-- Scenario briefing -->
+    <main id="brief" class="screen" hidden>
+        <h2 id="briefTitle"></h2>
+        <p id="briefText"></p>
+        <p id="briefRole" class="fine"></p>
+        <p><strong>Your goal:</strong> <span id="briefGoal"></span></p>
+        <p class="fine">Pasting is turned off and the other person replies at their own pace. The clock starts when you
+            open the chat.</p>
+        <button class="btn" id="enterBtn">Open the chat</button>
+    </main>
+
+    <!-- Chat -->
+    <section id="chat" hidden>
+        <header class="chat-head">
+            <div class="avatar" id="avatar" aria-hidden="true"></div>
+            <div class="who"><b id="charName"></b><small id="status">online</small></div>
+            <div class="hud" aria-label="Live typing stats">
+                <span><b id="hudWpm">0</b> WPM</span>
+                <span class="hide-sm"><b id="hudMist">0</b> mistakes</span>
+            </div>
+            <button class="leave" id="leaveBtn">Leave</button>
+        </header>
+        <details class="scn">
+            <summary>What's happening</summary>
+            <p id="chatBrief"></p>
+        </details>
+        <div id="log" aria-live="polite">
+            <div class="dots" id="typing" hidden><span></span><span></span><span></span></div>
+        </div>
+        <div class="notice" id="notice" role="status" hidden></div>
+        <div class="composer">
+            <input id="msg" type="text" maxlength="280" autocomplete="off" autocorrect="off" autocapitalize="sentences"
+                spellcheck="false" placeholder="Type your reply and press Enter" aria-label="Your message">
+            <button class="btn" id="sendBtn" disabled>Send</button>
+        </div>
+    </section>
+
+    <!-- End -->
+    <main id="end" class="screen" hidden>
+        <h2 class="verdict" id="verdict"></h2>
+        <p class="score" id="scoreLine"></p>
+        <p class="reason" id="endReason"></p>
+        <dl class="stats" id="stats"></dl>
+        <p class="fine" id="endNote"></p>
+        <div class="actions">
+            <button class="btn" id="againBtn">Play another scenario</button>
+            <button class="btn ghost" id="homeBtn">Back to start</button>
+        </div>
+    </main>
+
+    <script>
+        (() => {
+            "use strict";
+
+            /* ------------------------------------------------------------------
+               Settings
+               ------------------------------------------------------------------ */
+            const CONFIG = {
+                model: "qwen/qwen3.8-27b",
+                tickMs: 2000,               // how often the game checks in with the AI
+                smartPoll: true,            // true: call the API only when something could matter (reply due, nudge due, ambient check)
+                                            // false: call the API on every single tick
+                ambientMs: 12000,           // with smartPoll, still check in at least this often (afterthoughts, mood)
+                nudgeGapsSec: [20, 25, 30, 30], // silence (after the AI's last message) before nudge 1, 2, 3, then walking away
+                minPlayerMsgsBeforeEnd: 4,
+                softMaxPlayerMsgs: 18,
+                hardMaxPlayerMsgs: 26,
+                maxHistory: 24,             // messages sent to the model per tick
+                typingGapMs: 3000           // pauses longer than this don't count as typing time
+            };
+            const API_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+            /* ------------------------------------------------------------------
+               Reply contract (AI -> game). Every tick the model returns ONE JSON object:
+
+                 {
+                   "thought": "private note to itself, never shown",
+                   "mood":    0-100   (how warm it feels towards the player; fed back next tick),
+                   "action":  "say" | "wait" | "end",
+                   "messages": ["text", ...]        // 1-3 bubbles for say, 0-2 last words for end, [] for wait
+                   "ending":  null | { "type": "good" | "bad", "score": 0-100, "reason": "one sentence" }
+                 }
+
+               Anything that isn't valid JSON, or is a placeholder like "[M]", is dropped and never shown.
+               ------------------------------------------------------------------ */
+
+            /* ------------------------------------------------------------------
+               Scenarios (predefined). "brief" is written to the player.
+               ------------------------------------------------------------------ */
+            const SCENARIOS = [
+                {
+                    id: "birthday", title: "The forgotten dinner", mood0: 20,
+                    brief: "Yesterday was Sara's birthday dinner. You forgot completely. She waited at the restaurant for 40 minutes before going home alone.",
+                    goal: "Repair things with your best friend.",
+                    char: { name: "Sara", age: 19, role: "the player's best friend of six years", personality: "warm and loyal, but proud; goes quiet and sarcastic when hurt", voice: "lowercase, short, says 'literally' and 'ok.' when hurt, uses '...' when sad", mood: "hurt, trying to act like it's fine" },
+                    charView: "You waited 40 minutes and felt forgotten. You want a real apology, not excuses. You keep bringing up specific details (the reservation, the cake, waiting alone).",
+                    opener: ["hey.", "did you have a good day yesterday?"],
+                    good: "The player apologises sincerely, owns the mistake without excuses, and offers a real way to make it up to you.",
+                    bad: "The player makes excuses, jokes it off, says it's no big deal, blames you, or keeps giving lazy one-word replies."
+                },
+                {
+                    id: "secret", title: "Who told everyone?", mood0: 15,
+                    brief: "Danish told you he failed a course and asked you to keep it quiet. Now half your friend group knows. You told nobody, but he's sure it was you.",
+                    goal: "Clear things up without losing the friendship.",
+                    char: { name: "Danish", age: 20, role: "a close friend of the player", personality: "sensitive, proud, hates being talked about", voice: "blunt short sentences, says 'bro', drops punctuation when angry, occasionally 'yaar'", mood: "angry and betrayed, though part of him hopes he's wrong" },
+                    charView: "Only the player knew your result, so you assume they told people. You soften only if they stay calm and offer a believable explanation (someone overheard, it spread another way) without attacking you.",
+                    opener: ["so how does everyone know about my result", "i only told you"],
+                    good: "The player stays calm, doesn't get defensive, honestly says they told no one, suggests how it could have leaked, and shows they care how you feel.",
+                    bad: "The player gets defensive, snaps back, accuses you of overreacting, or dismisses your feelings."
+                },
+                {
+                    id: "headphones", title: "The broken headphones", mood0: 60,
+                    brief: "You borrowed Hamza's expensive headphones last week. Yesterday you dropped them and one side stopped working. He just texted asking for them back.",
+                    goal: "Deal with it honestly and keep Hamza as a friend.",
+                    char: { name: "Hamza", age: 21, role: "a friend of the player", personality: "easygoing, jokes a lot, but takes his stuff seriously", voice: "chill, says 'yo', 'bro', 'lol'; turns short and cold if he feels lied to", mood: "relaxed at first" },
+                    charView: "You don't know yet that they're broken. You find out only when the player tells you or you get suspicious. Being lied to makes you far angrier than an honest confession.",
+                    opener: ["yo can i get my headphones back today?", "need them for tomorrow"],
+                    good: "The player admits it early and honestly, takes responsibility, and offers to repair or replace them.",
+                    bad: "The player lies, stalls, blames the headphones, or acts like it's not a big deal."
+                },
+                {
+                    id: "cancelled", title: "Cancelled again", mood0: 30,
+                    brief: "This is the third time you've cancelled on Ayesha. Tonight's movie plan is off. The truth is you've been buried in deadlines and helping out at home, and you never told her.",
+                    goal: "Make her understand, and set up a plan you'll actually keep.",
+                    char: { name: "Ayesha", age: 20, role: "a good friend of the player", personality: "kind, direct, tired of being the one who always makes the effort", voice: "direct, uses full stops for emphasis, says 'honestly', dry sarcasm", mood: "disappointed and a bit fed up" },
+                    charView: "You don't know why the player keeps cancelling and are starting to think they don't value the friendship. You open up if they are honest and propose a concrete new plan.",
+                    opener: ["so you're cancelling. again.", "cool."],
+                    good: "The player is honest about why, apologises sincerely, and proposes a specific new plan.",
+                    bad: "The player gives vague excuses, gets defensive, says you're overreacting, or makes a promise with no specifics."
+                },
+                {
+                    id: "joke", title: "Just a joke", mood0: 25,
+                    brief: "You posted a joke about Zain's haircut in the group chat and tagged him. Everyone laughed except Zain. He just messaged you privately.",
+                    goal: "Work out what's really bothering him and fix it.",
+                    char: { name: "Zain", age: 20, role: "a friend of the player", personality: "funny but private; hates being the centre of attention", voice: "sarcastic, one-word replies when mad ('k', 'sure', 'fine'), warms up with jokes", mood: "embarrassed and annoyed, won't say why outright" },
+                    charView: "You were embarrassed that the joke was in front of everyone. You drop hints and want the player to work it out instead of explaining.",
+                    opener: ["k.", "nice joke btw"],
+                    good: "The player realises it embarrassed you in public, apologises sincerely, and offers to fix it (delete it, say something to the group).",
+                    bad: "The player says it was just a joke, tells you to lighten up, gets defensive, or never figures out what's wrong."
+                },
+                {
+                    id: "project", title: "Slides due at nine", mood0: 40,
+                    brief: "Your group presentation is tomorrow at 9 a.m. Your slides aren't done. Hira has finished everything else and is about to find out.",
+                    goal: "Come clean and get the slides done without wrecking the team.",
+                    char: { name: "Hira", age: 21, role: "a classmate in the player's group project", personality: "organised, stressed under pressure, values honesty", voice: "clipped and efficient, says 'ok', 'listen', 'seriously', the odd stress typo", mood: "tired and tense" },
+                    charView: "The presentation is at 9 a.m. and you're stressed. You want honesty and a specific plan, not vague promises.",
+                    opener: ["hey", "can you send me your slides? i'm putting the deck together tonight"],
+                    good: "The player admits the slides aren't done, commits to a specific deadline tonight, and offers to help however they can.",
+                    bad: "The player makes excuses, promises with no specifics, blames someone else, or stalls."
+                },
+                {
+                    id: "airport", title: "Left at arrivals", mood0: 30,
+                    brief: "You promised to pick up your cousin Bilal from the airport at 6 p.m. It's 6:40. You overslept and haven't left home yet.",
+                    goal: "Be honest and sort out a plan before he gives up on you.",
+                    char: { name: "Bilal", age: 22, role: "the player's cousin", personality: "cheerful and teasing when relaxed, dramatic when tired", voice: "dramatic, says 'bhai' and 'bro', ALL CAPS bursts when frustrated, teases once calm", mood: "tired, worried, exasperated" },
+                    charView: "You've been waiting 40 minutes with heavy bags and 15% battery. You want a real ETA or a solution. You forgive an honest apology quickly, since it's family.",
+                    opener: ["bro where are you", "i'm at arrivals been standing here for 30 min"],
+                    good: "The player admits they overslept, apologises, and gives a realistic plan (honest ETA or arranging a ride) while keeping you updated.",
+                    bad: "The player lies about their ETA, makes excuses, or offers no solution, so you book a ride and stop talking to them."
+                },
+                {
+                    id: "weekend", title: "Weekend plans", mood0: 60,
+                    brief: "You want to make plans with Rida this weekend. She says yes to everything but never commits. You'd like to lock something in today.",
+                    goal: "Agree on what, when and where.",
+                    char: { name: "Rida", age: 19, role: "a friend of the player", personality: "cheerful, indecisive, a little anxious about spending money", voice: "bubbly, says 'heyy', 'idkkk', 'omg', hedges with 'maybe?' and 'whatever you want'", mood: "upbeat but vague" },
+                    charView: "You say yes to everything but freeze when asked to choose. A concrete, low-pressure, affordable suggestion helps you commit.",
+                    opener: ["heyy", "so what are we doing this weekend?"],
+                    good: "The player and you agree on a specific plan (what, when, where) without pressure.",
+                    bad: "The player pushes hard, gets frustrated, insults you, or the plan stays vague until you say let's just skip it."
+                },
+                {
+                    id: "cheer", title: "Failed the test again", mood0: 40,
+                    brief: "Omar failed his driving test for the second time. He just texted you about it.",
+                    goal: "Be the friend he needs right now.",
+                    char: { name: "Omar", age: 20, role: "a friend of the player", personality: "jokes to hide his feelings, doesn't like being pitied", voice: "jokey, says 'lol' and 'haha' to mask feelings, goes shorter and lowercase when sad", mood: "disappointed, covering it with humour" },
+                    charView: "You're hiding disappointment behind jokes. You only open up if the player listens and is kind.",
+                    opener: ["failed again lol", "guess i'm just not meant to drive"],
+                    good: "The player listens, shows real empathy, and encourages you without dismissing or lecturing; you open up and feel better.",
+                    bad: "The player dismisses it, lectures, makes it about themselves, or teases you."
+                },
+                {
+                    id: "dishes", title: "The sink situation", mood0: 35,
+                    brief: "You and Farhan share a flat. The dishes have been piling up for a week, some yours and some his. He's decided to bring it up.",
+                    goal: "Sort it out without a fight.",
+                    char: { name: "Farhan", age: 22, role: "the player's flatmate", personality: "fair-minded, conflict-averse but has a limit", voice: "calm and even, complete sentences, starts with 'look,' or 'honestly,'", mood: "irritated but wants a fix, not a fight" },
+                    charView: "You feel like you're the one cleaning up. You agree to a simple chore plan if the player owns their share.",
+                    opener: ["hey can we talk about the kitchen", "it's been a week and i'm the one cleaning up"],
+                    good: "The player owns their share, doesn't blame you back, and proposes a fair, simple chore plan.",
+                    bad: "The player gets defensive, blames you, stonewalls, or turns it into a tit-for-tat fight."
+                },
+                {
+                    id: "photo", title: "The photo", mood0: 30,
+                    brief: "You posted a group photo from yesterday. Mahnoor told you she didn't like how she looked in it, but you forgot. She just saw it online.",
+                    goal: "Make it right with Mahnoor.",
+                    char: { name: "Mahnoor", age: 19, role: "a friend of the player", personality: "sweet, self-conscious, slow to anger but firm", voice: "soft-spoken, lowercase, says 'um' and trails off with '...', goes quiet when upset", mood: "upset and embarrassed" },
+                    charView: "You told the player yesterday you didn't want that photo posted. You want it taken down and a real apology.",
+                    opener: ["did you post that pic?", "i literally said i didn't like it"],
+                    good: "The player apologises sincerely, takes the photo down, and promises to ask first next time.",
+                    bad: "The player says you look fine, gets defensive, or refuses to take it down."
+                }
+            ];
+
+            /* ------------------------------------------------------------------
+               State + helpers
+               ------------------------------------------------------------------ */
+            const $ = id => document.getElementById(id);
+            const sleep = ms => new Promise(r => setTimeout(r, ms));
+            const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
+            const rand = (a, b) => a + Math.random() * (b - a);
+
+            const els = {
+                log: $("log"), typing: $("typing"), input: $("msg"), send: $("sendBtn"),
+                notice: $("notice"), status: $("status")
+            };
+
+            let lastScenarioId = null;
+            let S = null;        // current game
+            let prevLen = 0;     // length of the input box at the previous input event
+            let compat = 0;      // 0 = full request, 1 = no reasoning_effort, 2 = plain request
+
+            function newGame(scenario) {
+                return {
+                    scenario, messages: [],
+                    startedAt: 0, endedAt: 0, ended: false, busy: false,
+                    lastCallAt: 0, lastTypedAt: 0, pauseUntil: 0,
+                    waitStreak: 0, nudges: 0, errors: 0, parseFails: 0,
+                    thought: "", mood: scenario.mood0,
+                    tickTimer: null, hudTimer: null, result: null,
+                    stats: { typed: 0, mistakes: 0, sentChars: 0, msgs: 0, activeMs: 0, lastKeyAt: 0 }
+                };
+            }
+
+            function show(id) {
+                ["start", "brief", "chat", "end"].forEach(s => { $(s).hidden = s !== id; });
+                window.scrollTo(0, 0);
+            }
+
+            const countMine = () => S.messages.filter(m => m.who === "me").length;
+
+            function unanswered() {
+                let n = 0;
+                for (let i = S.messages.length - 1; i >= 0 && S.messages[i].who === "me"; i--) n++;
+                return n;
+            }
+
+            /* ------------------------------------------------------------------
+               Start + briefing
+               ------------------------------------------------------------------ */
+            const heroLines = [
+                "sorry, i should have texted you first",
+                "i get why you're upset. can we talk?",
+                "you're right, i messed up"
+            ];
+            (function hero() {
+                const el = $("heroText");
+                if (matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = heroLines[0]; return; }
+                let li = 0, ci = 0, deleting = false;
+                (function step() {
+                    const line = heroLines[li];
+                    if (!deleting) {
+                        ci++;
+                        el.textContent = line.slice(0, ci);
+                        if (ci === line.length) { deleting = true; return setTimeout(step, 1600); }
+                        return setTimeout(step, 55 + Math.random() * 60);
+                    }
+                    ci -= 2;
+                    if (ci <= 0) { ci = 0; deleting = false; li = (li + 1) % heroLines.length; el.textContent = ""; return setTimeout(step, 400); }
+                    el.textContent = line.slice(0, ci);
+                    setTimeout(step, 25);
+                })();
+            })();
+
+            function pickScenario() {
+                const pool = SCENARIOS.filter(s => s.id !== lastScenarioId);
+                const s = pool[Math.floor(Math.random() * pool.length)];
+                lastScenarioId = s.id;
+                return s;
+            }
+
+            function renderBrief(sc) {
+                $("briefTitle").textContent = sc.title;
+                $("briefText").textContent = sc.brief;
+                const role = sc.char.role
+                    .replace("the player's group project", "your group project")
+                    .replace(/^the player's /, "your ")
+                    .replace(/ of the player$/, "")
+                    .replace(/ in your group project$/, " from your group project");
+                $("briefRole").textContent = "You're texting " + sc.char.name + ", " + role + ".";
+                $("briefGoal").textContent = sc.goal;
+            }
+
+            $("startBtn").onclick = async () => {
+                const btn = $("startBtn"), err = $("startErr");
+                err.textContent = "";
+                btn.disabled = true;
+                try { await keyReady; }
+                catch (e) {
+                    err.textContent = "Couldn't load api.txt. Put your Groq key in api.txt next to index.html and open this page through a local server (for example: python -m http.server) rather than as a file.";
+                    btn.disabled = false;
+                    return;
+                }
+                btn.disabled = false;
+                S = newGame(pickScenario());
+                renderBrief(S.scenario);
+                show("brief");
+            };
+
+            $("againBtn").onclick = () => { S = newGame(pickScenario()); renderBrief(S.scenario); show("brief"); };
+            $("homeBtn").onclick = () => show("start");
+            $("enterBtn").onclick = beginChat;
+            $("leaveBtn").onclick = () => endGame("BAD", 10, "You left the chat before things were sorted out.", 300);
+
+            /* ------------------------------------------------------------------
+               Chat UI
+               ------------------------------------------------------------------ */
+            function addBubble(who, text) {
+                const d = document.createElement("div");
+                d.className = "b " + who;
+                d.textContent = text;
+                els.log.insertBefore(d, els.typing);
+                els.log.scrollTop = els.log.scrollHeight;
+            }
+
+            function push(who, text) {
+                S.messages.push({ who, text, t: Date.now() });
+                addBubble(who, text);
+            }
+
+            function showTyping(on) {
+                els.typing.hidden = !on;
+                els.status.textContent = on ? "typing…" : "online";
+                if (on) els.log.scrollTop = els.log.scrollHeight;
+            }
+
+            function markSeen() {
+                if (els.log.querySelector(".seen")) return;
+                const mine = els.log.querySelectorAll(".b.me");
+                if (!mine.length) return;
+                const last = mine[mine.length - 1];
+                if (last.nextElementSibling && last.nextElementSibling.classList.contains("b") && last.nextElementSibling.classList.contains("ai")) return;
+                const s = document.createElement("div");
+                s.className = "seen";
+                s.textContent = "Seen";
+                last.after(s);
+                els.log.scrollTop = els.log.scrollHeight;
+            }
+
+            function setNotice(text) {
+                els.notice.hidden = !text;
+                els.notice.textContent = text || "";
+            }
+
+            async function aiSay(text) {
+                if (S.ended) return;
+                showTyping(true);
+                await sleep(clamp(500 + text.length * 45, 800, 3500));   // feels like someone typing
+                showTyping(false);
+                if (S.ended) return;
+                push("ai", text);
+            }
+
+            async function beginChat() {
+                const sc = S.scenario;
+                els.log.querySelectorAll(".b, .seen").forEach(n => n.remove());
+                setNotice("");
+                $("charName").textContent = sc.char.name;
+                $("avatar").textContent = sc.char.name[0];
+                $("chatBrief").textContent = sc.brief + " Goal: " + sc.goal;
+                $("hudWpm").textContent = "0";
+                $("hudMist").textContent = "0";
+                els.input.value = ""; prevLen = 0;
+                els.input.disabled = false; els.send.disabled = true;
+                show("chat");
+
+                S.startedAt = Date.now();
+                S.lastCallAt = Date.now();
+                S.tickTimer = setInterval(tick, CONFIG.tickMs);
+                S.hudTimer = setInterval(updateHud, 500);
+
+                S.busy = true;
+                await sleep(900);
+                for (let i = 0; i < sc.opener.length; i++) {
+                    await aiSay(sc.opener[i]);
+                    if (i < sc.opener.length - 1) await sleep(rand(300, 800));
+                }
+                S.busy = false;
+                S.lastCallAt = Date.now();
+                els.input.focus();
+            }
+
+            /* ------------------------------------------------------------------
+               Typing tracking
+               ------------------------------------------------------------------ */
+            els.input.addEventListener("paste", e => e.preventDefault());
+            els.input.addEventListener("drop", e => e.preventDefault());
+
+            els.input.addEventListener("input", () => {
+                if (!S || S.ended) return;
+                const st = S.stats, now = performance.now(), len = els.input.value.length;
+                if (len < prevLen) st.mistakes++;                 // every correction counts as a mistake
+                else if (len > prevLen) st.typed += len - prevLen;
+                if (st.lastKeyAt && now - st.lastKeyAt < CONFIG.typingGapMs) st.activeMs += now - st.lastKeyAt;
+                st.lastKeyAt = now;
+                S.lastTypedAt = now;
+                prevLen = len;
+                els.send.disabled = !els.input.value.trim();
+            });
+
+            els.input.addEventListener("keydown", e => {
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+            });
+            els.send.onclick = sendMessage;
+
+            function sendMessage() {
+                if (!S || S.ended) return;
+                const text = els.input.value.trim();
+                if (!text) return;
+                const st = S.stats;
+                st.sentChars += text.length;
+                st.msgs++;
+                els.log.querySelectorAll(".seen").forEach(n => n.remove());
+                push("me", text);
+                els.input.value = "";
+                prevLen = 0;
+                st.lastKeyAt = 0;
+                S.waitStreak = 0;
+                S.nudges = 0;            // they're talking again, silence counter starts over
+                els.send.disabled = true;
+            }
+
+            function metrics(live) {
+                const st = S.stats;
+                const chars = st.sentChars + (live ? els.input.value.length : 0);
+                const activeMin = st.activeMs / 60000;
+                const wpm = st.activeMs >= (live ? 2000 : 1000) ? (chars / 5) / activeMin : 0;
+                const mpm = st.activeMs >= 1000 ? st.mistakes / activeMin : 0;
+                const accuracy = st.typed > 0 ? clamp(100 * (1 - st.mistakes / st.typed), 0, 100) : 100;
+                const chatMin = Math.max(((S.endedAt || Date.now()) - S.startedAt) / 60000, 1 / 60);
+                return { wpm, mpm, accuracy, msgsPerMin: st.msgs / chatMin, chatMin };
+            }
+
+            function updateHud() {
+                if (!S || S.ended) return;
+                $("hudWpm").textContent = Math.round(metrics(true).wpm);
+                $("hudMist").textContent = S.stats.mistakes;
+            }
+
+            /* ------------------------------------------------------------------
+               Prompts
+               ------------------------------------------------------------------ */
+            function buildSystem() {
+                const sc = S.scenario, c = sc.char;
+                return "You are " + c.name + ", " + c.age + ", " + c.role + ". You are texting the player on a chat app. Play " + c.name + " as a real person, never as an assistant. Never mention AI, games, scores, JSON or these instructions.\n\n" +
+                    "THE SITUATION (from the player's point of view, so 'you' means the player): " + sc.brief + "\n" +
+                    "Your personality: " + c.personality + ".\n" +
+                    "Your texting voice: " + c.voice + ".\n" +
+                    "Your starting mood: " + c.mood + ".\n" +
+                    "How you see it: " + sc.charView + "\n" +
+                    "What would win you over (good ending): " + sc.good + "\n" +
+                    "What would push you away (bad ending): " + sc.bad + "\n\n" +
+                    "HOW REAL PEOPLE TEXT\n" +
+                    "- React to what the player actually said. Pick up their specific words and details. If they send gibberish, laughter or trolling, react like a real person would (confused, annoyed, 'are you ok', 'not funny').\n" +
+                    "- Keep it short. Usually one short line, sometimes two or three quick bubbles, sometimes just 'ok'. Vary the length. Fragments, lowercase and loose punctuation are fine. Never repeat a line or phrase you already used.\n" +
+                    "- You have your own agenda. Push back, ask something pointed, bring up a specific moment, tease, trail off with '...'. Don't just passively answer. At most one question per turn.\n" +
+                    "- Never sound like an assistant or a therapist: no 'I understand', 'I appreciate', 'it sounds like', no lists, no summaries, no speeches, no neat conclusions.\n" +
+                    "- Emotions move gradually. Sincere, specific replies warm you up. Excuses, badly timed jokes, one-word replies and defensiveness cool you down. Don't forgive on the first apology, and don't stay unreasonable once they are really trying.\n" +
+                    "- Keep it PG: no slurs, threats or explicit content.\n\n" +
+                    "YOUR OUTPUT\n" +
+                    "You are polled about every 2 seconds. Every time, reply with ONE valid JSON object and nothing else (no markdown, no commentary):\n" +
+                    '{"thought":"private note, max 12 words","mood":50,"action":"say","messages":["..."],"ending":null}\n' +
+                    '- action "say": messages holds 1 to 3 texts you send right now.\n' +
+                    '- action "wait": send nothing (messages is []). Only valid if the player is typing, or you just spoke and there is nothing new to react to and no NUDGE is due.\n' +
+                    '- action "end": messages holds 0 to 2 last texts, and ending is {"type":"good" or "bad","score":0-100,"reason":"one sentence, addressed to the player as you"}.\n' +
+                    "- mood: how warm you feel towards the player right now (0 furious, 50 neutral, 100 fully won over).\n" +
+                    "- If STATUS says the player has messages you haven't answered, you MUST reply (say or end). Never wait on them.\n" +
+                    "- If a NUDGE or WALK AWAY is due, do exactly what STATUS says.\n" +
+                    "- Endings: GOOD when things are resolved, BAD when the friendship or trust is clearly damaged. Usually after 8 to 18 player messages, never before 4 (unless walking away). GOOD scores are 50-100, BAD scores 0-49, and the score reflects how well the player handled it.\n\n" +
+                    "EXAMPLES OF THE STYLE (different situation, never copy the wording)\n" +
+                    'Player: "sorry" -> {"thought":"one word, not enough","mood":22,"action":"say","messages":["sorry for what","be specific"],"ending":null}\n' +
+                    'Player: "hehehehe" -> {"thought":"they are joking, i am not amused","mood":15,"action":"say","messages":["are you serious rn","i\'m not laughing"],"ending":null}\n' +
+                    'Player: "i should have told you about the trip, i just panicked and i hate that i made you feel left out" -> {"thought":"ok that felt real","mood":58,"action":"say","messages":["...ok","thank you for saying that","it still stung tho"],"ending":null}\n' +
+                    'Nudge -> {"thought":"they went quiet","mood":30,"action":"say","messages":["hello??"],"ending":null}\n' +
+                    'Ending -> {"thought":"we are good","mood":85,"action":"end","messages":["ok. we are good","just do not do it again lol"],"ending":{"type":"good","score":82,"reason":"You owned it, stayed honest and made a real offer to fix it."}}';
+            }
+
+            const NUDGE_TONES = [
+                "Casual prod in your own voice, like 'hello?' or '??' or 'you there?'.",
+                "More pointed. Show you're annoyed or hurt that they're not answering.",
+                "Last warning. Make it clear you won't wait around much longer."
+            ];
+
+            function buildTurn(ctx) {
+                const now = Date.now(), msgs = S.messages, name = S.scenario.char.name;
+                const shown = msgs.slice(-CONFIG.maxHistory);
+                const lines = shown.map(m => (m.who === "ai" ? name : "Player") + ": " + m.text);
+                const mine = msgs.filter(m => m.who === "me"), theirs = msgs.filter(m => m.who === "ai");
+                const ago = arr => arr.length ? Math.round((now - arr[arr.length - 1].t) / 1000) + "s ago" : "never";
+                const elapsed = Math.round((now - S.startedAt) / 1000);
+
+                let extra = "";
+                if (ctx.walkAway) {
+                    extra += "\nWALK AWAY: the player has ignored you " + S.nudges + " times and been silent " + Math.round(ctx.silentFor) + "s since your last message. You are done waiting. Send one last short message in your voice, then use action end with a BAD ending (score 0-25) whose reason is about leaving you on read.";
+                } else if (ctx.nudge) {
+                    extra += "\nNUDGE " + ctx.nudge + " OF 3 IS DUE: the player has been silent for " + Math.round(ctx.silentFor) + "s since your last message. You must use action say with a short natural follow-up. " + NUDGE_TONES[ctx.nudge - 1];
+                }
+                if (ctx.pending > 0 && S.waitStreak >= 1) extra += "\nYou already held off once. Reply to the player now.";
+                if (mine.length >= CONFIG.softMaxPlayerMsgs || elapsed > 420) extra += "\nThis has gone on long enough. Steer towards an ending within your next 1-2 replies.";
+                if (mine.length >= CONFIG.hardMaxPlayerMsgs || elapsed > 600) extra += "\nEnd the conversation NOW with action end.";
+
+                return "CHAT SO FAR" + (msgs.length > shown.length ? " (older messages omitted)" : "") + ":\n" +
+                    (lines.join("\n") || "(nothing yet)") +
+                    "\n\nYOUR PRIVATE NOTES FROM LAST TURN: thought=\"" + (S.thought || "none yet") + "\", mood=" + Math.round(S.mood) +
+                    "\n\nSTATUS:\n- Player messages so far: " + mine.length +
+                    "\n- Player messages you haven't answered: " + ctx.pending +
+                    "\n- Player is typing right now: " + (ctx.typingNow ? "yes" : "no") +
+                    "\n- Player's last message: " + ago(mine) +
+                    "\n- Your last message: " + ago(theirs) +
+                    "\n- Seconds since chat started: " + elapsed + extra +
+                    "\n\nReply with the JSON object only.";
+            }
+
+            /* ------------------------------------------------------------------
+               Parsing the reply
+               ------------------------------------------------------------------ */
+            function extractJson(raw) {
+                let t = (raw || "").replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+                t = t.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+                const a = t.indexOf("{"), b = t.lastIndexOf("}");
+                if (a < 0 || b < a) return null;
+                try { return JSON.parse(t.slice(a, b + 1)); } catch (e) { return null; }
+            }
+
+            function cleanMsg(m) {
+                if (typeof m !== "string") return "";
+                let t = m.replace(/\*[^*]*\*/g, "").trim();
+                t = t.replace(new RegExp("^\\s*(" + S.scenario.char.name + "|Player)\\s*:\\s*", "i"), "");
+                t = t.replace(/^["“”]+|["“”]+$/g, "").trim();
+                if (/^\[?\s*(m|msg|message|messages|wait|say|text|reply|end)\s*\]?\.?$/i.test(t)) return "";   // placeholders like "[M]"
+                if (/^[\[{]/.test(t) && /[\]}]$/.test(t)) return "";                                              // leaked tags / json
+                return t.slice(0, 220);
+            }
+
+            function normalizeReply(o) {
+                if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+                let msgs = Array.isArray(o.messages) ? o.messages : (typeof o.message === "string" ? [o.message] : []);
+                msgs = msgs.map(cleanMsg).filter(Boolean).slice(0, 3);
+
+                let ending = null;
+                const e = o.ending;
+                if (e && typeof e === "object") {
+                    const type = String(e.type || "").toLowerCase();
+                    if (type === "good" || type === "bad") {
+                        ending = {
+                            kind: type.toUpperCase(),
+                            score: clamp(Math.round(Number(e.score)) || 0, 0, 100),
+                            reason: String(e.reason || "").replace(/\s+/g, " ").trim().slice(0, 240)
+                        };
+                    }
+                }
+
+                let action = String(o.action || "").toLowerCase();
+                if (action === "end" && !ending) action = msgs.length ? "say" : "wait";
+                if (action !== "say" && action !== "wait" && action !== "end") action = msgs.length ? "say" : "wait";
+                if (action === "say" && !msgs.length) action = "wait";
+                if (action === "wait") msgs = [];
+
+                const mood = Number(o.mood);
+                return {
+                    action, msgs,
+                    ending: action === "end" ? ending : null,
+                    thought: typeof o.thought === "string" ? o.thought.slice(0, 140) : "",
+                    mood: Number.isFinite(mood) ? clamp(mood, 0, 100) : null
+                };
+            }
+
+            /* ------------------------------------------------------------------
+               The heartbeat
+               ------------------------------------------------------------------ */
+            function silenceInfo(typingNow) {
+                const last = S.messages[S.messages.length - 1];
+                if (!last || last.who !== "ai" || typingNow) return { silentFor: 0, due: false };
+                const silentFor = (Date.now() - last.t) / 1000;
+                const gaps = CONFIG.nudgeGapsSec;
+                const gap = gaps[Math.min(S.nudges, gaps.length - 1)];
+                return { silentFor, due: silentFor >= gap };
+            }
+
+            function tick() {
+                if (!S || S.ended || S.busy || document.hidden) return;
+                const now = Date.now();
+                if (now < S.pauseUntil) return;
+
+                const pending = unanswered();
+                const typingNow = els.input.value.length > 0 && performance.now() - S.lastTypedAt < 1800;
+                const sil = silenceInfo(typingNow);
+                const ctx = {
+                    pending, typingNow, silentFor: sil.silentFor,
+                    nudge: sil.due ? Math.min(S.nudges + 1, 3) : 0,
+                    walkAway: sil.due && S.nudges >= 3
+                };
+
+                if (CONFIG.smartPoll) {
+                    const replyDue = pending > 0 && !typingNow;      // wait until they stop typing
+                    const ambient = now - S.lastCallAt >= CONFIG.ambientMs;
+                    if (!replyDue && !sil.due && !ambient) return;
+                }
+                callModel(ctx);
+            }
+
+            function requestBody() {
+                const body = {
+                    model: CONFIG.model,
+                    temperature: 0.75,
+                    top_p: 0.85,
+                    max_tokens: 260,
+                    messages: [
+                        { role: "system", content: buildSystem() },
+                        { role: "user", content: buildTurn(S.ctx) }
+                    ]
+                };
+                if (compat < 1) body.reasoning_effort = "none";           // instruct mode: fast, no thinking
+                if (compat < 2) { body.response_format = { type: "json_object" }; body.presence_penalty = 0.4; }
+                return JSON.stringify(body);
+            }
+
+            async function callModel(ctx) {
+                S.busy = true;
+                S.ctx = ctx;
+                S.lastCallAt = Date.now();
+                const snapshot = S.messages.length;
+                if (ctx.pending > 0) markSeen();
+                try {
+                    const res = await fetch(API_URL, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+                        body: requestBody()
+                    });
+
+                    if (res.status === 429) {
+                        const wait = parseFloat(res.headers.get("retry-after")) || 8;
+                        S.pauseUntil = Date.now() + wait * 1000;
+                        setNotice("The chat service is rate-limiting requests. Pausing for a few seconds.");
+                        return;
+                    }
+                    if (res.status === 401) {
+                        S.pauseUntil = Date.now() + 30000;
+                        setNotice("Groq rejected the API key (401). Check the key in api.txt.");
+                        return;
+                    }
+                    if (res.status === 400 && compat < 2) {       // a request option this model doesn't accept: retry with fewer
+                        console.warn("Groq 400:", await res.text());
+                        compat++;
+                        return;
+                    }
+                    if (!res.ok) throw new Error("HTTP " + res.status);
+
+                    const data = await res.json();
+                    const raw = data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : "";
+                    S.errors = 0;
+                    setNotice("");
+                    if (S.ended) return;
+
+                    const reply = normalizeReply(extractJson(raw));
+                    if (!reply) {                                  // unreadable output is dropped, never shown
+                        S.parseFails++;
+                        console.warn("Unreadable model output:", raw);
+                        if (S.parseFails >= 3) setNotice("The AI's last replies couldn't be read. Retrying.");
+                        return;
+                    }
+                    S.parseFails = 0;
+                    // The player spoke while the model was thinking: don't let it end the chat blind.
+                    if (reply.action === "end" && S.messages.length !== snapshot && !ctx.walkAway) return;
+                    await handleReply(reply, ctx);
+                } catch (err) {
+                    S.errors++;
+                    if (S.errors >= 3) setNotice("Can't reach the chat service. Check your connection and api.txt.");
+                } finally {
+                    S.busy = false;
+                }
+            }
+
+            async function handleReply(r, ctx) {
+                if (r.thought) S.thought = r.thought;
+                if (r.mood !== null) S.mood = r.mood;
+
+                if (!r.msgs.length && !ctx.walkAway) {
+                    if (ctx.pending > 0 || ctx.nudge > 0) S.waitStreak++;   // it should have said something; it is asked again next tick
+                    return;
+                }
+                S.waitStreak = 0;
+
+                if (r.msgs.length) {
+                    await sleep(ctx.pending > 0 ? rand(500, 1500) : rand(250, 700));   // a beat to "read" before typing
+                    for (let i = 0; i < r.msgs.length; i++) {
+                        await aiSay(r.msgs[i]);
+                        if (S.ended) return;
+                        if (i < r.msgs.length - 1) await sleep(rand(300, 900));
+                    }
+                    if (ctx.nudge > 0) S.nudges++;
+                }
+
+                // They ignored every nudge: the character gives up, whatever the model chose.
+                if (ctx.walkAway) {
+                    const e = r.ending && r.ending.kind === "BAD" ? r.ending : null;
+                    endGame("BAD", Math.min(e ? e.score : 15, 25),
+                        (e && e.reason) || "You left them on read until they gave up on the conversation.", 1500);
+                    return;
+                }
+
+                const mine = countMine();
+                if (r.ending && mine >= CONFIG.minPlayerMsgsBeforeEnd) {
+                    const good = r.ending.kind === "GOOD";
+                    const score = good ? Math.max(50, r.ending.score) : Math.min(49, r.ending.score);
+                    const reason = r.ending.reason || (good ? "You handled the conversation well." : "The conversation didn't go your way.");
+                    endGame(r.ending.kind, score, reason, 1500);
+                    return;
+                }
+
+                // Safety net if the model never wraps up.
+                const elapsed = (Date.now() - S.startedAt) / 1000;
+                if (mine >= CONFIG.hardMaxPlayerMsgs + 3 || elapsed > 720) {
+                    endGame("BAD", 40, "The conversation ran out of steam before anything was settled.", 800);
+                }
+            }
+
+            /* ------------------------------------------------------------------
+               Ending
+               ------------------------------------------------------------------ */
+            function endGame(kind, score, reason, delay) {
+                if (!S || S.ended) return;
+                S.ended = true;
+                S.endedAt = Date.now();
+                S.result = { kind, score, reason };
+                clearInterval(S.tickTimer);
+                clearInterval(S.hudTimer);
+                els.input.disabled = true;
+                els.send.disabled = true;
+                showTyping(false);
+                els.status.textContent = "offline";
+                setTimeout(renderEnd, delay);
+            }
+
+            function renderEnd() {
+                const r = S.result, m = metrics(false), st = S.stats;
+                const good = r.kind === "GOOD";
+                const v = $("verdict");
+                v.textContent = good ? "Good ending" : "Bad ending";
+                v.className = "verdict " + (good ? "good" : "bad");
+                $("scoreLine").textContent = "Conversation score: " + r.score + " / 100";
+                $("endReason").textContent = r.reason + " (" + S.scenario.title + ")";
+
+                const row = (label, value, unit) =>
+                    '<div class="stat"><dt>' + label + '</dt><dd>' + value + (unit ? ' <small>' + unit + '</small>' : '') + '</dd></div>';
+                const mins = Math.floor(m.chatMin), secs = Math.round((m.chatMin - mins) * 60);
+                $("stats").innerHTML =
+                    row("Words per minute (WPM)", Math.round(m.wpm), "wpm") +
+                    row("Accuracy", Math.round(m.accuracy), "%") +
+                    row("Mistakes per minute (MPM)", m.mpm.toFixed(1), "mpm") +
+                    row("Messages per minute", m.msgsPerMin.toFixed(1), "msg/min") +
+                    row("Messages sent", st.msgs, "") +
+                    row("Chat length", mins + ":" + String(secs).padStart(2, "0"), "min");
+                $("endNote").textContent = "WPM counts only the time you were actually typing. A mistake is any correction you made with backspace or delete.";
+                show("end");
+            }
+        })();
+    </script>
+</body>
+
+</html>
